@@ -1,3 +1,4 @@
+import { DEMO_USER } from '../../../../seed/demo-data';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
@@ -182,6 +183,35 @@ describe('Given the Express server class with "/users" route', () => {
       .expect(403);
     const other = await UserModel.findById(ids1[0]);
     expect(other?.name).toBe('maria');
+  });
+  test('PUT ignores role and myGames and stores a new password hashed', async () => {
+    await setUp
+      .put(`/users/${ids1[1]}`)
+      .set(header, bearer)
+      .send({ role: 'ADMIN', myGames: [ids1[0]], password: 'NewPass123!' })
+      .expect(200);
+    const me = await UserModel.findById(ids1[1]);
+    expect(me?.role).not.toBe('ADMIN');
+    expect(me?.myGames.map(String)).not.toContain(ids1[0]);
+    expect(me?.password).not.toBe('NewPass123!');
+    expect(await Auth.compare('NewPass123!', me!.password)).toBe(true);
+  });
+  test('the shared demo account cannot change its email or password', async () => {
+    const before = await UserModel.findById(ids1[1]);
+    const demoBearer = `Bearer ${Auth.createJWT({
+      id: ids1[1],
+      email: DEMO_USER.email,
+      role: 'user',
+    })}`;
+    await setUp
+      .put(`/users/${ids1[1]}`)
+      .set(header, demoBearer)
+      .send({ name: 'Renamed', email: 'taken@over.it', password: 'Locked0ut!' })
+      .expect(200);
+    const after = await UserModel.findById(ids1[1]);
+    expect(after?.name).toBe('Renamed');
+    expect(after?.email).toBe(before?.email);
+    expect(after?.password).toBe(before?.password);
   });
   test('GET and DELETE on another user return 403 and keep it', async () => {
     await setUp.get(`/users/${ids1[0]}`).set(header, bearer).expect(403);

@@ -234,6 +234,67 @@ describe('joven an Express server class with "/games" route', () => {
         .expect(200);
       expect(await GameModel.findById(mine.id)).toBeNull();
     });
+    it('PUT by an owner cannot redirect the edit to another game via body.id or reassign owner', async () => {
+      const attacker = await UserModel.create({
+        name: 'attacker',
+        email: 'attacker@test.it',
+        password: 'x',
+        cart: [],
+        myGames: [],
+      });
+      const own = await GameModel.create({
+        gameName: 'Own',
+        category: 'RPG',
+        img: 'x',
+        releaseDate: 'x',
+        price: 1,
+        description: 'x',
+        owner: attacker.id,
+      });
+      const attackerBearer = `Bearer ${Auth.createJWT({
+        id: attacker.id,
+        email: 'attacker@test.it',
+        role: 'user',
+      })}`;
+      await request(server.app)
+        .put(`/games/${own.id}`)
+        .set(header1, attackerBearer)
+        .send({ id: ids[1], gameName: 'hijacked', owner: ids[1] })
+        .expect(200);
+      expect((await GameModel.findById(ids[1]))?.gameName).toBe('Guitar Hero 2');
+      const after = await GameModel.findById(own.id);
+      expect(after?.gameName).toBe('hijacked');
+      expect(String(after?.owner)).toBe(attacker.id);
+    });
+    it('public game reads expose only the seller name, not email/address/games', async () => {
+      const seller = await UserModel.create({
+        name: 'Seller',
+        email: 'seller@test.it',
+        password: 'x',
+        address: 'Secret Street 1',
+        cart: [],
+        myGames: [],
+      });
+      const listed = await GameModel.create({
+        gameName: 'Listed',
+        category: 'RPG',
+        img: 'x',
+        releaseDate: 'x',
+        price: 1,
+        description: 'x',
+        owner: seller.id,
+      });
+      const one = await request(server.app).get(`/games/${listed.id}`).expect(200);
+      const all = await request(server.app).get('/games').expect(200);
+      const fromList = all.body.results[0].find((g: { id: string }) => g.id === listed.id);
+      for (const owner of [one.body.results[0].owner, fromList.owner]) {
+        expect(owner.name).toBe('Seller');
+        expect(owner.id).toBe(seller.id);
+        expect(owner).not.toHaveProperty('email');
+        expect(owner).not.toHaveProperty('address');
+        expect(owner).not.toHaveProperty('myGames');
+      }
+    });
     it('POST /games by a real user returns the new game with `id` (same shape as GET)', async () => {
       const creator = await UserModel.create({
         name: 'creator',

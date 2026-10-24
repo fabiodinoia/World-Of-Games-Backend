@@ -1,7 +1,7 @@
 import createDebug from 'debug';
 import { NextFunction, Request, Response } from 'express';
 import { HTTPError } from '../../../commons/error.js';
-import { TokenPayload } from '../../../commons/interfaces.js';
+import { RequestPlus, TokenPayload } from '../../../commons/interfaces.js';
 import UserCreator from '../../../user/application/usercreator.js';
 import UserDeleter from '../../../user/application/userdeleter.js';
 import UserFinder from '../../../user/application/userfinder.js';
@@ -9,6 +9,17 @@ import UserSearcher from '../../../user/application/usersearcher.js';
 import UserUpdater from '../../../user/application/userupdater.js';
 import { Auth } from '../auth/auth.js';
 import { UserRole } from '../../../user/domain/user.model.js';
+import { pick } from '../../../commons/pick.js';
+import { DEMO_USER } from '../../../seed/demo-data.js';
+
+const EDITABLE_USER_FIELDS = [
+  'name',
+  'email',
+  'password',
+  'img',
+  'address',
+  'cart',
+] as const;
 
 const debug = createDebug('WOF: user controller');
 
@@ -106,15 +117,27 @@ export class UserController {
     }
   }
 
-  async updateUser(req: Request, res: Response, next: NextFunction) {
+  async updateUser(req: RequestPlus, res: Response, next: NextFunction) {
     try {
       debug('updateUser');
       const { id } = req.params;
-      const { body } = req;
+      // Profile fields and the cart only: role and myGames are never
+      // client-editable, and id comes from the URL.
+      const changes: Record<string, unknown> = pick(
+        req.body,
+        EDITABLE_USER_FIELDS
+      );
+      // The shared demo account keeps its sign-in details for every visitor.
+      if (req.info?.email === DEMO_USER.email) {
+        delete changes.email;
+        delete changes.password;
+      }
+      if (typeof changes.password === 'string')
+        changes.password = await Auth.hash(changes.password);
 
       const newUser = {
+        ...changes,
         id,
-        ...body,
       };
 
       await this.userUpdater.execute(newUser);

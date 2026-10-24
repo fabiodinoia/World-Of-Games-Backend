@@ -8,6 +8,7 @@ import { NextFunction, Request, Response } from 'express';
 import GameFinderAll from '../../../games/application/gamefinderall.js';
 import { HTTPError } from '../../../commons/error.js';
 import { RequestPlus } from '../../../commons/interfaces.js';
+import { pick } from '../../../commons/pick.js';
 import UserFinder from '../../../user/application/userfinder.js';
 import UserUpdater from '../../../user/application/userupdater.js';
 import User from '../../../user/domain/user.model.js';
@@ -34,6 +35,15 @@ const toGameJson = (data: unknown): Record<string, unknown> => {
   const id = rest.id ?? rawId;
   return { ...rest, id: id === undefined ? undefined : String(id) };
 };
+
+const EDITABLE_GAME_FIELDS = [
+  'gameName',
+  'category',
+  'img',
+  'releaseDate',
+  'price',
+  'description',
+] as const;
 
 const debug = createDebug('WOF: user controller');
 
@@ -149,9 +159,11 @@ export default class GameController {
         throw invalidCategory();
       await this.assertOwner(id, req.info?.id);
 
+      // Only listing fields are editable; id comes from the URL and the owner
+      // never changes, whatever the body says.
       const newGame = {
+        ...pick(body, EDITABLE_GAME_FIELDS),
         id,
-        ...body,
       };
 
       await this.gameUpdater.execute(newGame);

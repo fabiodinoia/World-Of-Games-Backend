@@ -19,14 +19,14 @@ export default class GameMongoRepo implements GameRepository {
   }
 
   async findAll(): Promise<Game[]> {
-    const response = await this.gameModel.find().populate('owner', '-cart');
+    const response = await this.gameModel.find().populate('owner', 'name img');
     return response;
   }
 
   async findOne(id: string): Promise<Game | null> {
     const response = await this.gameModel
       .findById(id)
-      .populate('owner', '-cart');
+      .populate('owner', 'name img');
     return response;
   }
 
