@@ -8,17 +8,8 @@ export default {
   globalTeardown: '<rootDir>/test/global-teardown.ts',
   setupFiles: ['<rootDir>/test/setup-env.ts'],
   collectCoverageFrom: ['src/**/*.ts'],
-  coveragePathIgnorePatterns: [
-    'index.ts',
-    'app.ts',
-    'schema',
-    'error.ts',
-    'config',
-    'model',
-    'schema.ts',
-    'user.ts',
-    'game.ts',
-    'express.server.ts',
-    'seed/run.ts',
-  ],
+  coverageReporters: ['text', 'lcov', 'json-summary'],
+  coverageThreshold: {
+    global: { statements: 100, branches: 100, functions: 100, lines: 100 },
+  },
 };

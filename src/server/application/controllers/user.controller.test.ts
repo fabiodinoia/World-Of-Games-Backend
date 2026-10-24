@@ -236,5 +236,13 @@ describe('Given userController class', () => {
       await controller.deleteUser(req, res, next);
       expect(res.status).toHaveBeenCalled();
     });
+    test('Then if deleting fails it should pass the error to next', async () => {
+      const req = { params: { id: '1' } } as unknown as RequestPlus;
+      const error = new Error('db down');
+      (mockRepo.delete as jest.Mock).mockRejectedValueOnce(error);
+      const failNext = jest.fn();
+      await controller.deleteUser(req, res, failNext);
+      expect(failNext).toHaveBeenCalledWith(error);
+    });
   });
 });

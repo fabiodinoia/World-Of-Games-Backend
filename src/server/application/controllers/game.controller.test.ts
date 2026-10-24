@@ -404,4 +404,15 @@ describe('Given GameController category validation and POST response shape', () 
     );
     expect(localNext.mock.calls[0][0].statusCode).toBe(400);
   });
+
+  test('createGame answers 404 when the signed-in user no longer exists', async () => {
+    (mockUserRepo.find as jest.Mock).mockReturnValueOnce(null);
+    const next404 = jest.fn();
+    await controller.createGame(
+      { body: {}, info: { id: 'gone' } } as unknown as RequestPlus,
+      res,
+      next404
+    );
+    expect(next404.mock.calls[0][0].statusCode).toBe(404);
+  });
 });

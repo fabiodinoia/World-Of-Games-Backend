@@ -45,4 +45,11 @@ describe('Given the Game schema JSON shape', () => {
     ]);
     expect(json.cart[1]).not.toHaveProperty('_id');
   });
+
+  test('Then the id falls back to the plain object when the source has none', () => {
+    const transform = (GameModel.schema.get('toJSON') as { transform: Function }).transform;
+    const ret: Record<string, unknown> = { _id: 'abc', __v: 0, gameName: 'x' };
+    transform({}, ret);
+    expect(ret).toEqual({ id: 'abc', gameName: 'x' });
+  });
 });
