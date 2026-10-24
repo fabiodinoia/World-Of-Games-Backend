@@ -2,6 +2,8 @@
 
 ## Backend
 
+[![CI](https://github.com/fabiodinoia/World-Of-Games-Backend/actions/workflows/ci.yml/badge.svg)](https://github.com/fabiodinoia/World-Of-Games-Backend/actions/workflows/ci.yml) ![coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)
+
 Welcome to the backend side of World Of Games project.
 
 ## What it is
@@ -48,7 +50,7 @@ Scripts: `build` (tsc), `build:watch`, `start`, `start:prod`, `start:mon` (nodem
 npm test
 ```
 
-No `.env` and no database needed: tests spin up an in-memory MongoDB (`mongodb-memory-server`, configured in `jest.config.js` and `test/`). The first install downloads a `mongod` binary into `node_modules/.cache`; after that it works offline.
+Coverage is 100% (statements, branches, functions, lines) with no files excluded; `jest.config.js` enforces it, so `npm test` and CI fail if it drops. No `.env` and no database needed: tests spin up an in-memory MongoDB (`mongodb-memory-server`, configured in `jest.config.js` and `test/`). The first install downloads a `mongod` binary into `node_modules/.cache`; after that it works offline.
 
 ### Demo data
 
