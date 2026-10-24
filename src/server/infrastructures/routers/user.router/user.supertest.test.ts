@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import { config } from '../../../../config';
 import request from 'supertest';
 import { TokenPayload } from '../../../../commons/interfaces';
 import { Auth } from '../../../application/auth/auth';
 import { UserModel } from '../../../domain/user.schema';
+import '../../../domain/game.schema';
 import { dbConnect } from '../../db/db.connect';
 import ExpressServer from '../../../express.server.js';
 import { UserController } from '../../../application/controllers/user.controller';
@@ -35,7 +38,7 @@ const userSearcher = new UserSearcher(repo);
 const userUpdater = new UserUpdater(repo);
 const userDeleter = new UserDeleter(repo);
 
-const pass = 'test';
+const pass = 'testpass123'; // register validator requires >= 8 chars
 
 const setCollection = async () => {
   const databaseMock = [
@@ -43,7 +46,7 @@ const setCollection = async () => {
       name: 'maria',
       email: 'maria@test.it',
       password: pass,
-      shopList: [],
+      cart: [],
       myGames: [],
       img: 'test',
       address: 'test1',
@@ -53,7 +56,7 @@ const setCollection = async () => {
       name: 'angelo',
       email: 'angelo@test.it',
       password: pass,
-      shopList: [],
+      cart: [],
       myGames: [],
       img: 'test',
       address: 'test',
@@ -105,13 +108,9 @@ describe('Given the Express server class with "/users" route', () => {
     header = 'Authorization';
     bearer = `Bearer ${token1}`;
 
-    ok = setUp.get(`/users/${ids1[0]}`).set(header, bearer).expect(200);
-    notOk = await setUp.get(`/users/123`).set(header, bearer).expect(500);
-    okDel = await setUp
-      .delete(`/users/${ids1[0]}`)
-      .set(header, bearer)
-      .expect(204);
-    notOkDel = await setUp.delete(`/users/123`).set(header, bearer).expect(500);
+    notOk = await setUp.get(`/users/123`).set(header, bearer).expect(403);
+    okDel = undefined;
+    notOkDel = await setUp.delete(`/users/123`).set(header, bearer).expect(403);
   });
 
   afterAll(async () => {
@@ -124,7 +123,7 @@ describe('Given the Express server class with "/users" route', () => {
         name: 'newuser',
         email: 'newuser@test.it',
         password: pass,
-        shopList: [],
+        cart: [],
         myGames: [],
         img: 'test1',
         address: 'test',
@@ -133,17 +132,17 @@ describe('Given the Express server class with "/users" route', () => {
 
       await setUp.post('/users/register').send(newUser).expect(201);
     });
-    test('(NO)then a POST request to "/users/register"  with missing info should throw 401', async () => {
+    test('(NO)then a POST request to "/users/register"  with missing info should throw 400', async () => {
       const newUser = {
         password: pass,
-        shopList: [],
+        cart: [],
         myGames: [],
         img: 'test',
         address: 'test',
         notification: [],
       };
 
-      await setUp.post('/users/register').send(newUser).expect(401);
+      await setUp.post('/users/register').send(newUser).expect(400);
     });
   });
 
@@ -162,20 +161,66 @@ describe('Given the Express server class with "/users" route', () => {
       .expect(404);
   });
 
-  test('then the GET request  will send us back user data and a 200 status', async () => {
-    await ok;
+  test('then the GET request on the own user sends back data and a 200 status', async () => {
+    await setUp.get(`/users/${ids1[1]}`).set(header, bearer).expect(200);
   });
-  it('(NO) a GET request with wrong id should return a 500 status', async () => {
+  it('(NO) a GET request with a foreign id should return a 403 status', async () => {
     await notOk;
   });
-  test('if our PUT request must send user data and a 200 status', async () => {
-    await ok;
+  test('PUT on the own user returns 200', async () => {
+    await setUp
+      .put(`/users/${ids1[1]}`)
+      .set(header, bearer)
+      .send({ name: 'angelo2' })
+      .expect(200);
+  });
+  test('PUT on another user returns 403 and does not modify it', async () => {
+    await setUp
+      .put(`/users/${ids1[0]}`)
+      .set(header, bearer)
+      .send({ name: 'hacked' })
+      .expect(403);
+    const other = await UserModel.findById(ids1[0]);
+    expect(other?.name).toBe('maria');
+  });
+  test('GET and DELETE on another user return 403 and keep it', async () => {
+    await setUp.get(`/users/${ids1[0]}`).set(header, bearer).expect(403);
+    await setUp.delete(`/users/${ids1[0]}`).set(header, bearer).expect(403);
+    expect(await UserModel.findById(ids1[0])).not.toBeNull();
+  });
+  test('GET with a valid token for a different existing user returns 403', async () => {
+    const res = await setUp.get(`/users/${ids1[0]}`).set(header, bearer);
+    expect(res.status).toBe(403);
+  });
+  test('GET with a garbage or expired token returns 498, not 500', async () => {
+    await setUp.get(`/users/${ids1[1]}`).set(header, 'Bearer a.b.c').expect(498);
+    const expired = jwt.sign(
+      { id: ids1[1], email: 'angelo@test.it', role: 'x' },
+      config.jwtsecret as string,
+      { expiresIn: -10 }
+    );
+    await setUp
+      .get(`/users/${ids1[1]}`)
+      .set(header, `Bearer ${expired}`)
+      .expect(498);
   });
   it('ERROR the PUT request should throw 500 status', async () => {
     await notOk;
   });
-  test('then our DELETE request should send back user data and a 200 status', async () => {
-    await okDel;
+  test('GET own id that no longer exists in the DB returns 404, not 500', async () => {
+    const ghostId = new mongoose.Types.ObjectId().toString();
+    const ghostToken = Auth.createJWT({
+      id: ghostId,
+      email: 'ghost@test.it',
+      role: 'x',
+    });
+    const res = await setUp
+      .get(`/users/${ghostId}`)
+      .set(header, `Bearer ${ghostToken}`);
+    expect(res.status).toBe(404);
+  });
+  test('then our DELETE request on the own user returns 204', async () => {
+    await setUp.delete(`/users/${ids1[1]}`).set(header, bearer).expect(204);
   });
   it('(NO) the DELETE request must return a 204 status', async () => {
     await notOk;

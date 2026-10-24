@@ -77,7 +77,9 @@ describe('Given a interceptor class', () => {
         req.info = { id: '1' } as unknown as TokenPayload;
         req.params = { id: '2' }; // Change the value of req.params.id to '2'
         interceptor.authorized(req, resp, next);
-        expect(next).toHaveBeenCalled();
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({ statusCode: 403 })
+        );
       });
     });
     describe('When called with no matching ids', () => {

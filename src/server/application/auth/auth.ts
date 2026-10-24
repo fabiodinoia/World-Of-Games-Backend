@@ -7,7 +7,7 @@ const salt = 10;
 
 export class Auth {
   static createJWT(payload: TokenPayload) {
-    return jwt.sign(payload, config.jwtsecret as string);
+    return jwt.sign(payload, config.jwtsecret as string, { expiresIn: '1h' });
   }
 
   static verifyJWTgettingPayload(token: string): TokenPayload {

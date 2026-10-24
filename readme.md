@@ -4,59 +4,66 @@
 
 Welcome to the backend side of World Of Games project.
 
-## Description
+## What it is
 
-A video game marketplace where users are required to register and log in to use the application. Once logged in, they can view all games, filter them by categories, add them to their shopping cart, create games, and view the details of each game.
+REST API for **World of Games**, a video game marketplace. Anyone can browse games; registered users can log in (JWT), manage their profile and create/edit/delete games.
 
-Additionally, users can view their personal data, modify it, and log out.
+Stack: Node.js, Express 4, TypeScript (ESM), MongoDB/Mongoose, Jest + Supertest, `mongodb-memory-server` for tests. The code follows a DDD layout (`games/` and `user/` each with `domain`, `application`, `infrastructure`; `server/` holds controllers, routers, interceptors and the Express wiring).
 
-## Implementation
+## Endpoints
 
-backend project is build with:
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/health` | public | Liveness check, returns `{ status, uptime }` |
+| GET | `/games` | public | List all games |
+| GET | `/games/:id` | public | Game details |
+| GET | `/games/filter/:category` | public | Games by category (`Action`, `Adventure`, `RPG`, `FPS`, `MOBA`, `MMO`, `Sports`, `Strategy`, `Indie`) |
+| POST | `/games` | Bearer token | Create a game |
+| PUT | `/games/:id` | Bearer token | Update a game |
+| DELETE | `/games/:id` | Bearer token | Delete a game |
+| POST | `/users/register` | public | Register (name, email, password >= 8 chars) |
+| POST | `/users/login` | public | Log in, returns a JWT |
+| GET | `/users/:id` | Bearer token | User profile |
+| PUT | `/users/:id` | Bearer token | Update profile |
+| DELETE | `/users/:id` | Bearer token | Delete user |
 
-- node.js: <https://nodejs.org/en>
-- express: <https://expressjs.com/>
-- mongodb: <https://www.mongodb.com>
-- Typescript: <https://www.typescriptlang.org/>
-- Jest: <https://jestjs.io/>
+Send tokens as `Authorization: Bearer <jwt>`.
 
-the structure of the project is class oriented and was designed in DDD(Domain, Driven, Design) in order to respect SOLID, KISS and DRY principals.
+Security: `helmet` headers, CORS limited to `CORS_ORIGINS`, `express-rate-limit` on login/register and on all write endpoints, 100kb JSON body limit.
 
-DDD: <https://en.wikipedia.org/wiki/Domain-driven_design>
+## Run locally
 
-## End Points
+```bash
+npm install
+cp .env.example .env     # set MONGODB_URI and SECRET
+npm run build
+npm start                # http://localhost:4800
+```
 
-Users endpoints:
+Scripts: `build` (tsc), `build:watch`, `start`, `start:prod`, `start:mon` (nodemon), `test`, `test:watch`, `seed`.
 
-- Register a new user: POST → users/register
-- Log in: POST  → users/login
-- Retrieve user profile: GET →  /users/:userId
-- Update user profile: PUT →  /users/:userId
-- Delete a user: DELETE →  /users/:userId
+### Tests
 
-Games endpoints:
+```bash
+npm test
+```
 
-- List all games: GET →  /games
-- Get game details: GET →  /games/:id
-- Add a new game: POST →  /games
-- Edit a game: PUT → /games/:id
-- Delete a game: DELETE → /games/:id
+No `.env` and no database needed: tests spin up an in-memory MongoDB (`mongodb-memory-server`, configured in `jest.config.js` and `test/`). The first install downloads a `mongod` binary into `node_modules/.cache`; after that it works offline.
 
-## How to install and run the project
+### Demo data
 
-- On github, copy the url to clone our repo;
-- On your visualstudio, clone our repo in a new and empty folder;
-- Open the terminal and write npm i;
-- Write in the terminal npm start, the project will open;
-- In the terminal, write npm start, the landing page should appear;
-- Enjoy!
+```bash
+npm run seed
+```
 
-## Last information's
+Idempotent (safe to re-run). Creates the user `demo@worldofgames.dev` / `DemoPass123!` (bcrypt-hashed) and 10 games whose covers match the frontend assets (`assets/covers/*-cover.jpeg`, override with `SEED_IMG_BASE`).
 
-The project is 100% tested with jest and sonarCloud, with the implementation of supertest in order to check all the routes
+## Deploy notes
 
-- SonarCloud: <https://sonarcloud.io/summary/overall?id=isdi-coders-2023_Fabio-Di-Noia-Final-Project-back-202301-mad>;
-
-Once you have the installed and run the project you will need the frontend to make it work:
-
-- Front: <https://github.com/isdi-coders-2023/Fabio-Di-Noia-Final-Project-front-202301-mad>
+- Build command: `npm ci && npm run build`. Start command: `npm run start:prod`.
+- Required env: `MONGODB_URI`, `SECRET`, `CORS_ORIGINS` (your frontend origin(s)). Optional: `NAME`, `PORT`, `TRUST_PROXY=1` (set it behind a proxy).
+- Allow your host's outbound IPs in MongoDB Atlas network access.
+- Point the platform health check at `GET /health`.
+- Run `npm run seed` once against the production database if you want the demo user and catalogue.
+- `npm run seed` also **resets the demo data**: it re-upserts the demo user (password included) and restores every demo game to its original fields (re-creating any that were deleted). Schedule it as a cron job on the demo deployment (e.g. nightly) to undo changes made by visitors. Games/users created by others are left untouched.
+- Authorization: `GET/PUT/DELETE /users/:id` require the token's user id to match `:id`, and `PUT/DELETE /games/:id` require the token's user to be the game owner; otherwise the API answers `403`.

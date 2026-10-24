@@ -1,8 +1,11 @@
-import express, { Express } from 'express';
+import express, { Express, NextFunction, Request, Response } from 'express';
+import { CustomError } from '../commons/interfaces.js';
 import { dbConnect } from './infrastructures/db/db.connect.js';
 import ServerRouter from './Server.router.interface.js';
 import createDebug from 'debug';
 import cors from 'cors';
+import helmet from 'helmet';
+import { config } from '../config.js';
 
 const routes = [
   { endpoint: 'users/register', method: 'POST' },
@@ -10,6 +13,7 @@ const routes = [
   { endpoint: '/users/:userId', method: 'GET' },
   { endpoint: '/users/:userId', method: 'PUT' },
   { endpoint: '/users/:userId', method: 'DELETE' },
+  { endpoint: '/health', method: 'GET' },
   { endpoint: '/games', method: 'GET' },
   { endpoint: '/games/:id', method: 'GET' },
   { endpoint: '/games', method: 'POST' },
@@ -29,8 +33,12 @@ export default class ExpressServer {
   }
 
   config(): void {
-    this.app.use(express.json());
-    this.app.use(cors({ origin: '*' }));
+    // Needed behind a proxy (Render, Railway, Fly...) so rate limiting sees real IPs.
+    if (process.env.TRUST_PROXY) this.app.set('trust proxy', 1);
+    this.app.disable('x-powered-by');
+    this.app.use(helmet());
+    this.app.use(cors({ origin: config.corsOrigins }));
+    this.app.use(express.json({ limit: '100kb' }));
   }
 
   routes(): void {
@@ -38,9 +46,28 @@ export default class ExpressServer {
     this.app.get('/', (req, res, _next) => {
       res.json(routes);
     });
+    this.app.get('/health', (_req, res) => {
+      res.status(200).json({ status: 'ok', uptime: process.uptime() });
+    });
     this.routers.forEach((router) => {
       this.app.use(router.path, router.router);
     });
+    // Minimal error mapper: HTTPError carries `statusCode`; anything else is a 500.
+    this.app.use(
+      (
+        err: Partial<CustomError> & { status?: number },
+        _req: Request,
+        res: Response,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        _next: NextFunction
+      ) => {
+        // body-parser errors use `status`; keep their 4xx instead of masking as 500.
+        const status = err.statusCode ?? err.status ?? 500;
+        res.status(status).json({
+          error: err.statusMessage ?? 'Internal Server Error',
+        });
+      }
+    );
   }
 
   start(port: number): void {

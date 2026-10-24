@@ -19,7 +19,13 @@ export class Interceptors {
       if (!authHeader.startsWith('Bearer'))
         throw new HTTPError(498, 'Invalid header', 'Not bearer in auth header');
       const token = authHeader.slice(7);
-      const payload = Auth.verifyJWTgettingPayload(token);
+      let payload;
+      try {
+        payload = Auth.verifyJWTgettingPayload(token);
+      } catch {
+        // Expired / malformed / wrongly signed token: client auth problem, not a 500.
+        throw new HTTPError(498, 'Invalid token', 'Invalid or expired token');
+      }
       req.info = {
         id: payload.id,
         email: payload.email,
@@ -48,8 +54,8 @@ export class Interceptors {
 
       if ((req.info as TokenPayload).id !== req.params.id)
         throw new HTTPError(
-          401,
-          'Unauthorized',
+          403,
+          'Forbidden',
           'The ID from params is not equal to ID from Token'
         );
 

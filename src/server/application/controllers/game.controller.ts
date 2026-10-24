@@ -11,6 +11,29 @@ import { RequestPlus } from '../../../commons/interfaces.js';
 import UserFinder from '../../../user/application/userfinder.js';
 import UserUpdater from '../../../user/application/userupdater.js';
 import User from '../../../user/domain/user.model.js';
+import {
+  GAME_CATEGORIES,
+  isGameCategory,
+} from '../../../games/domain/game.model.js';
+
+const invalidCategory = () =>
+  new HTTPError(
+    400,
+    'Invalid category',
+    `Category must be one of: ${GAME_CATEGORIES.join(', ')}`
+  );
+
+/** Mongoose document (or plain object) -> JSON shape used by GET: `id`, no `_id`/`__v`. */
+const toGameJson = (data: unknown): Record<string, unknown> => {
+  const doc = data as { toObject?: () => Record<string, unknown> };
+  const plain =
+    typeof doc?.toObject === 'function'
+      ? doc.toObject()
+      : { ...(data as Record<string, unknown>) };
+  const { _id: rawId, __v: _version, ...rest } = plain;
+  const id = rest.id ?? rawId;
+  return { ...rest, id: id === undefined ? undefined : String(id) };
+};
 
 const debug = createDebug('WOF: user controller');
 
@@ -29,12 +52,24 @@ export default class GameController {
     debug('Game controller instantiated');
   }
 
+  private async assertOwner(gameId: string, userId?: string) {
+    if (!userId) throw new HTTPError(498, 'Invalid token', 'Not found user id');
+    const game = await this.gameFinder.execute(gameId);
+    if (!game) throw new HTTPError(404, 'Not found', 'Game not found');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const owner = game.owner as any;
+    if (String(owner?._id ?? owner) !== userId)
+      throw new HTTPError(403, 'Forbidden', 'Only the owner can modify a game');
+  }
+
   async createGame(req: RequestPlus, res: Response, next: NextFunction) {
     debug('createGame');
     try {
       const userId = req.info?.id;
       if (!userId) throw new HTTPError(404, 'Not found', 'Not found user id');
-      const actualUser: User = await this.userFinder.execute(userId);
+      const actualUser: User | null = await this.userFinder.execute(userId);
+
+      if (!actualUser) throw new HTTPError(404, 'Not found', 'Not found user');
 
       if (
         !req.body.gameName ||
@@ -48,13 +83,18 @@ export default class GameController {
           'Invalid Name, category, img or release date'
         );
 
+      if (!isGameCategory(req.body.category)) throw invalidCategory();
+
       req.body.owner = actualUser;
       const data = await this.gameCreator.execute(req.body);
       actualUser.myGames.push(data);
       await this.userUpdate.execute(actualUser);
       res.status(200);
+      // `data.owner` is the in-memory user document, whose myGames now
+      // contains `data` (circular, not JSON-serializable): reply with the id.
+      // Same shape as GET (`id`, no `_id`) so clients can link to it directly.
       res.json({
-        results: [data],
+        results: [{ ...toGameJson(data), owner: userId }],
       });
     } catch (error) {
       next(error);
@@ -100,11 +140,14 @@ export default class GameController {
     }
   }
 
-  async updateGame(req: Request, res: Response, next: NextFunction) {
+  async updateGame(req: RequestPlus, res: Response, next: NextFunction) {
     try {
       debug('updateGame');
       const { id } = req.params;
       const { body } = req;
+      if (body.category !== undefined && !isGameCategory(body.category))
+        throw invalidCategory();
+      await this.assertOwner(id, req.info?.id);
 
       const newGame = {
         id,
@@ -120,10 +163,11 @@ export default class GameController {
     }
   }
 
-  async deleteGame(req: Request, res: Response, next: NextFunction) {
+  async deleteGame(req: RequestPlus, res: Response, next: NextFunction) {
     try {
       debug('deleteGame');
       const { id } = req.params;
+      await this.assertOwner(id, req.info?.id);
 
       await this.gameDeleter.execute(id);
 

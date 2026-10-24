@@ -1,6 +1,23 @@
 import User from '../../user/domain/user.model.js';
 
-export type gameCategory = 'MOBA' | 'RPG' | 'MMO' | 'FPS';
+/** Every category the API accepts (also enforced by the Mongoose schema). */
+export const GAME_CATEGORIES = [
+  'Action',
+  'Adventure',
+  'RPG',
+  'FPS',
+  'MOBA',
+  'MMO',
+  'Sports',
+  'Strategy',
+  'Indie',
+] as const;
+
+export type gameCategory = (typeof GAME_CATEGORIES)[number];
+
+export const isGameCategory = (value: unknown): value is gameCategory =>
+  typeof value === 'string' &&
+  (GAME_CATEGORIES as readonly string[]).includes(value);
 
 export default class Game {
   // eslint-disable-next-line no-useless-constructor, max-params

@@ -1,5 +1,5 @@
 import { model, Schema, SchemaTypes } from 'mongoose';
-import Game from '../../games/domain/game.model.js';
+import Game, { GAME_CATEGORIES } from '../../games/domain/game.model.js';
 
 const gameSchema = new Schema<Game>({
   gameName: {
@@ -15,6 +15,7 @@ const gameSchema = new Schema<Game>({
   category: {
     type: String,
     required: true,
+    enum: GAME_CATEGORIES,
     unique: false,
   },
   price: {
@@ -32,17 +33,19 @@ const gameSchema = new Schema<Game>({
     required: true,
     unique: false,
   },
-  owner: [
-    {
-      type: SchemaTypes.ObjectId,
-      ref: 'Games',
-    },
-  ],
+  owner: {
+    type: SchemaTypes.ObjectId,
+    ref: 'User',
+    required: true,
+  },
 });
 
 gameSchema.set('toJSON', {
-  transform(_document, returnedObject) {
-    returnedObject.id = returnedObject._id;
+  transform(document, returnedObject) {
+    // Read the id from the source document: when one game is populated more
+    // than once (e.g. twice in a cart) the plain objects can share state, and
+    // `returnedObject._id` is already gone for the repeats.
+    returnedObject.id = String(document._id ?? returnedObject._id);
     delete returnedObject.__v;
     delete returnedObject._id;
   },

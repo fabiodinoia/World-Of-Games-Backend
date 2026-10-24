@@ -1,3 +1,4 @@
+import { config } from './config.js';
 import GameDeleter from './games/application/gamedeleter.js';
 import GameFinder from './games/application/gamefinder.js';
 import GameFinderAll from './games/application/gamefinderall.js';
@@ -66,7 +67,7 @@ const bootstrap = async () => {
 
   const server = new ExpressServer([userRouter, gameRouter]);
 
-  server.start(4800);
+  server.start(config.port);
 };
 
 bootstrap();

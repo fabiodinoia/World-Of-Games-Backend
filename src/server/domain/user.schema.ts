@@ -1,5 +1,5 @@
-import { model, Schema, SchemaTypes } from 'mongoose';
-import User from '../../user/domain/user.model.js';
+import { model, Schema, SchemaTypeOptions, SchemaTypes } from 'mongoose';
+import User, { UserRole } from '../../user/domain/user.model.js';
 
 const userSchema = new Schema<User>({
   name: {
@@ -18,9 +18,9 @@ const userSchema = new Schema<User>({
   },
   img: {
     type: String,
-    required: true,
+    required: false,
   },
-  shopList: [
+  cart: [
     {
       type: SchemaTypes.ObjectId,
       ref: 'Games',
@@ -36,6 +36,12 @@ const userSchema = new Schema<User>({
     type: String,
     required: false,
     unique: false,
+  },
+  role: {
+    type: String as SchemaTypeOptions<UserRole>['type'],
+    enum: UserRole,
+    default: UserRole.USER,
+    required: true,
   },
 });
 

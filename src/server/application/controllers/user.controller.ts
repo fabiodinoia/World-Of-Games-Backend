@@ -8,6 +8,7 @@ import UserFinder from '../../../user/application/userfinder.js';
 import UserSearcher from '../../../user/application/usersearcher.js';
 import UserUpdater from '../../../user/application/userupdater.js';
 import { Auth } from '../auth/auth.js';
+import { UserRole } from '../../../user/domain/user.model.js';
 
 const debug = createDebug('WOF: user controller');
 
@@ -28,6 +29,8 @@ export class UserController {
       debug('findUser');
       const { id } = req.params;
       const response = await this.userFinder.execute(id);
+      if (!response)
+        throw new HTTPError(404, 'Not found', 'User not found');
 
       res.status(200);
       res.json({ results: [response] });
@@ -44,15 +47,14 @@ export class UserController {
       if (
         !req.body.email ||
         !req.body.password ||
-        !req.body.name ||
-        !req.body.img
+        !req.body.name
       )
         throw new HTTPError(
           401,
           'Unauthorized',
           'Invalid Name, Email or password'
         );
-
+      req.body.role = UserRole.USER as UserRole;
       req.body.password = await Auth.hash(req.body.password);
 
       req.body.cart = [];
@@ -89,7 +91,7 @@ export class UserController {
       const payload: TokenPayload = {
         id: data[0].id,
         email: data[0].email,
-        role: 'Admin',
+        role: data[0].role,
       };
 
       const token = Auth.createJWT(payload);

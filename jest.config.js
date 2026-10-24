@@ -4,6 +4,9 @@ export default {
   testEnvironment: 'node',
   testPathIgnorePatterns: ['dist', 'node_modules'],
   resolver: 'jest-ts-webcompat-resolver',
+  globalSetup: '<rootDir>/test/global-setup.ts',
+  globalTeardown: '<rootDir>/test/global-teardown.ts',
+  setupFiles: ['<rootDir>/test/setup-env.ts'],
   collectCoverageFrom: ['src/**/*.ts'],
   coveragePathIgnorePatterns: [
     'index.ts',
@@ -16,5 +19,6 @@ export default {
     'user.ts',
     'game.ts',
     'express.server.ts',
+    'seed/run.ts',
   ],
 };
