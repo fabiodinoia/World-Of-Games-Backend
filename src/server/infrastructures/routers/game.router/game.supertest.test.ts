@@ -49,6 +49,7 @@ const setCollection = async () => {
       releaseDate: 'test',
       price: 20,
       description: 'test',
+      owner: new mongoose.Types.ObjectId(),
     },
     {
       gameName: 'Guitar Hero 2',
@@ -57,6 +58,7 @@ const setCollection = async () => {
       releaseDate: 'test',
       price: 20,
       description: 'test',
+      owner: new mongoose.Types.ObjectId(),
     },
   ];
   await GameModel.deleteMany();
@@ -161,6 +163,232 @@ describe('joven an Express server class with "/games" route', () => {
         .get(`/games/filte/:MMO`)
         .set(header1, bearer1)
         .expect(404);
+    });
+    it('GET /games works without a token (public browsing)', async () => {
+      const res = await request(server.app).get('/games').expect(200);
+      expect(res.body.results.length).toBeGreaterThan(0);
+    });
+    it('GET /games/:id works without a token', async () => {
+      await request(server.app).get(`/games/${ids[0]}`).expect(200);
+    });
+    it('GET /games/filter/:category works without a token', async () => {
+      await request(server.app).get('/games/filter/MMO').expect(200);
+    });
+    it('POST /games without a token is rejected', async () => {
+      await request(server.app).post('/games').send({}).expect(498);
+    });
+    it('PUT /games/:id without a token is rejected', async () => {
+      await request(server.app).put(`/games/${ids[0]}`).send({}).expect(498);
+    });
+    it('DELETE /games/:id without a token is rejected', async () => {
+      await request(server.app).delete(`/games/${ids[0]}`).expect(498);
+    });
+    it('PUT/DELETE by a non-owner return 403 and leave the game intact', async () => {
+      await request(server.app)
+        .put(`/games/${ids[0]}`)
+        .set(header1, bearer1)
+        .send({ gameName: 'hacked' })
+        .expect(403);
+      await request(server.app)
+        .delete(`/games/${ids[0]}`)
+        .set(header1, bearer1)
+        .expect(403);
+      const game = await GameModel.findById(ids[0]);
+      expect(game?.gameName).toBe('Guitar Hero');
+    });
+    it('PUT/DELETE by the owner succeed', async () => {
+      const ownerUser = await UserModel.create({
+        name: 'owner',
+        email: 'o@test.it',
+        password: 'x',
+        cart: [],
+        myGames: [],
+        img: 'x',
+        address: 'x',
+        notification: [],
+      });
+      const ownerId = ownerUser.id;
+      const mine = await GameModel.create({
+        gameName: 'Mine',
+        category: 'RPG',
+        img: 'x',
+        releaseDate: 'x',
+        price: 1,
+        description: 'x',
+        owner: ownerId,
+      });
+      const ownerBearer = `Bearer ${Auth.createJWT({
+        id: ownerId,
+        email: 'o@test.it',
+        role: 'user',
+      })}`;
+      await request(server.app)
+        .put(`/games/${mine.id}`)
+        .set(header1, ownerBearer)
+        .send({ gameName: 'Mine2' })
+        .expect(200);
+      expect((await GameModel.findById(mine.id))?.gameName).toBe('Mine2');
+      await request(server.app)
+        .delete(`/games/${mine.id}`)
+        .set(header1, ownerBearer)
+        .expect(200);
+      expect(await GameModel.findById(mine.id)).toBeNull();
+    });
+    it('PUT by an owner cannot redirect the edit to another game via body.id or reassign owner', async () => {
+      const attacker = await UserModel.create({
+        name: 'attacker',
+        email: 'attacker@test.it',
+        password: 'x',
+        cart: [],
+        myGames: [],
+      });
+      const own = await GameModel.create({
+        gameName: 'Own',
+        category: 'RPG',
+        img: 'x',
+        releaseDate: 'x',
+        price: 1,
+        description: 'x',
+        owner: attacker.id,
+      });
+      const attackerBearer = `Bearer ${Auth.createJWT({
+        id: attacker.id,
+        email: 'attacker@test.it',
+        role: 'user',
+      })}`;
+      await request(server.app)
+        .put(`/games/${own.id}`)
+        .set(header1, attackerBearer)
+        .send({ id: ids[1], gameName: 'hijacked', owner: ids[1] })
+        .expect(200);
+      expect((await GameModel.findById(ids[1]))?.gameName).toBe('Guitar Hero 2');
+      const after = await GameModel.findById(own.id);
+      expect(after?.gameName).toBe('hijacked');
+      expect(String(after?.owner)).toBe(attacker.id);
+    });
+    it('public game reads expose only the seller name, not email/address/games', async () => {
+      const seller = await UserModel.create({
+        name: 'Seller',
+        email: 'seller@test.it',
+        password: 'x',
+        address: 'Secret Street 1',
+        cart: [],
+        myGames: [],
+      });
+      const listed = await GameModel.create({
+        gameName: 'Listed',
+        category: 'RPG',
+        img: 'x',
+        releaseDate: 'x',
+        price: 1,
+        description: 'x',
+        owner: seller.id,
+      });
+      const one = await request(server.app).get(`/games/${listed.id}`).expect(200);
+      const all = await request(server.app).get('/games').expect(200);
+      const fromList = all.body.results[0].find((g: { id: string }) => g.id === listed.id);
+      for (const owner of [one.body.results[0].owner, fromList.owner]) {
+        expect(owner.name).toBe('Seller');
+        expect(owner.id).toBe(seller.id);
+        expect(owner).not.toHaveProperty('email');
+        expect(owner).not.toHaveProperty('address');
+        expect(owner).not.toHaveProperty('myGames');
+      }
+    });
+    it('POST /games by a real user returns the new game with `id` (same shape as GET)', async () => {
+      const creator = await UserModel.create({
+        name: 'creator',
+        email: 'creator@test.it',
+        password: 'x',
+        cart: [],
+        myGames: [],
+        img: 'x',
+        address: 'x',
+        notification: [],
+      });
+      const creatorBearer = `Bearer ${Auth.createJWT({
+        id: creator.id,
+        email: 'creator@test.it',
+        role: 'user',
+      })}`;
+      const res = await request(server.app)
+        .post('/games')
+        .set(header1, creatorBearer)
+        .send({
+          gameName: 'Hades',
+          category: 'Indie',
+          releaseDate: '2020-09-17',
+          price: 24.5,
+          description: 'Roguelike dungeon crawler',
+          img: 'https://example.com/hades.jpg',
+        })
+        .expect(200);
+      const created = res.body.results[0];
+      expect(typeof created.id).toBe('string');
+      expect(created).not.toHaveProperty('_id');
+      expect(created.owner).toBe(creator.id);
+      const fetched = await request(server.app)
+        .get(`/games/${created.id}`)
+        .expect(200);
+      expect(fetched.body.results[0].id).toBe(created.id);
+      const filtered = await request(server.app)
+        .get('/games/filter/Indie')
+        .expect(200);
+      expect(
+        filtered.body.results[0].map((g: { id: string }) => g.id)
+      ).toContain(created.id);
+    });
+    it('POST /games with an unknown category answers 400', async () => {
+      const creator = await UserModel.findOne({ email: 'creator@test.it' });
+      const creatorBearer = `Bearer ${Auth.createJWT({
+        id: creator!.id,
+        email: 'creator@test.it',
+        role: 'user',
+      })}`;
+      await request(server.app)
+        .post('/games')
+        .set(header1, creatorBearer)
+        .send({
+          gameName: 'Gran Turismo',
+          category: 'Racing',
+          releaseDate: '2022-03-04',
+          price: 30,
+          description: 'x',
+          img: 'x',
+        })
+        .expect(400);
+    });
+    it('the schema rejects categories outside the allowed list', async () => {
+      await expect(
+        GameModel.create({
+          gameName: 'x',
+          category: 'Racing',
+          img: 'x',
+          releaseDate: 'x',
+          price: 1,
+          description: 'x',
+          owner: new mongoose.Types.ObjectId(),
+        })
+      ).rejects.toThrow(/category/);
+    });
+    it('GET /health returns 200 with uptime', async () => {
+      const res = await request(server.app).get('/health').expect(200);
+      expect(res.body.status).toBe('ok');
+      expect(typeof res.body.uptime).toBe('number');
+    });
+    it('sets security headers and restricts CORS to configured origins', async () => {
+      const res = await request(server.app)
+        .get('/health')
+        .set('Origin', 'http://localhost:4200');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.headers['x-powered-by']).toBeUndefined();
+      expect(res.headers['access-control-allow-origin']).toBe(
+        'http://localhost:4200'
+      );
+      const other = await request(server.app)
+        .get('/health')
+        .set('Origin', 'http://evil.example');
+      expect(other.headers['access-control-allow-origin']).toBeUndefined();
     });
   });
 });

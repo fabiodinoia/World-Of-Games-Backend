@@ -17,10 +17,10 @@ export default class UserMongoRepo implements UserRepository {
     await this.userModel.findByIdAndUpdate(user.id, user);
   }
 
-  async find(id: string): Promise<User> {
+  async find(id: string): Promise<User | null> {
     const response = await this.userModel
       .findById(id)
-      .populate('myGames', '-owner').populate('shopList', '-owner');
+      .populate('myGames', '-owner').populate('cart', '-owner');
     return response as User;
   }
 

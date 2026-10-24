@@ -10,7 +10,7 @@ export default class GameMongoRepo implements GameRepository {
   }
 
   async create(game: Game): Promise<Game> {
-    const data = await await this.gameModel.create(game);
+    const data = await this.gameModel.create(game);
     return data;
   }
 
@@ -19,14 +19,14 @@ export default class GameMongoRepo implements GameRepository {
   }
 
   async findAll(): Promise<Game[]> {
-    const response = await this.gameModel.find().populate('owner', '-shopList');
+    const response = await this.gameModel.find().populate('owner', 'name img');
     return response;
   }
 
   async findOne(id: string): Promise<Game | null> {
     const response = await this.gameModel
       .findById(id)
-      .populate('owner', '-shopList');
+      .populate('owner', 'name img');
     return response;
   }
 

@@ -61,10 +61,21 @@ describe('Given userController class', () => {
           id: '1',
         },
       } as unknown as Request;
+      (mockRepo.find as jest.Mock).mockResolvedValueOnce({ id: '1' });
 
       await controller.findUser(req, res, next);
       expect(res.status).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalled();
+    });
+    test('Then if the user does not exist it should call next with a 404 HTTPError', async () => {
+      const req = { params: { id: '1' } } as unknown as Request;
+      (mockRepo.find as jest.Mock).mockResolvedValueOnce(null);
+      const localNext = jest.fn();
+
+      await controller.findUser(req, res, localNext);
+      expect(localNext).toHaveBeenCalledWith(
+        expect.objectContaining({ statusCode: 404 })
+      );
     });
     test('Then if the user info is INcompleted it should return next', async () => {
       const req = {} as unknown as Request;
@@ -224,6 +235,14 @@ describe('Given userController class', () => {
       (mockRepo.delete as jest.Mock).mockResolvedValue({ id: '1' });
       await controller.deleteUser(req, res, next);
       expect(res.status).toHaveBeenCalled();
+    });
+    test('Then if deleting fails it should pass the error to next', async () => {
+      const req = { params: { id: '1' } } as unknown as RequestPlus;
+      const error = new Error('db down');
+      (mockRepo.delete as jest.Mock).mockRejectedValueOnce(error);
+      const failNext = jest.fn();
+      await controller.deleteUser(req, res, failNext);
+      expect(failNext).toHaveBeenCalledWith(error);
     });
   });
 });

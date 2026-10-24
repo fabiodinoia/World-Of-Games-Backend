@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import GameController from '../../../application/controllers/game.controller.js';
 import { Interceptors } from '../../../application/interceptors/interceptors.js';
+import { writeLimiter } from '../../../application/interceptors/rate-limit.js';
 import ServerRouter from '../../../Server.router.interface.js';
 
 export default class GameRouter implements ServerRouter {
@@ -17,32 +18,31 @@ export default class GameRouter implements ServerRouter {
   registerControllers(): void {
     this.router.get(
       '/filter/:category',
-      this.interceptor.logged,
       this.controller.searchGame.bind(this.controller)
     );
     this.router.get(
       '/',
-      this.interceptor.logged,
       this.controller.findAllGame.bind(this.controller)
     );
     this.router.get(
       '/:id',
-      this.interceptor.logged,
-
       this.controller.findGame.bind(this.controller)
     );
     this.router.post(
       '/',
+      writeLimiter,
       this.interceptor.logged,
       this.controller.createGame.bind(this.controller)
     );
     this.router.put(
       '/:id',
+      writeLimiter,
       this.interceptor.logged,
       this.controller.updateGame.bind(this.controller)
     );
     this.router.delete(
       '/:id',
+      writeLimiter,
       this.interceptor.logged,
       this.controller.deleteGame.bind(this.controller)
     );

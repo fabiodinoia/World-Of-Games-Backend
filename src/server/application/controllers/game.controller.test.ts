@@ -91,7 +91,7 @@ describe('Given GameController class', () => {
         name: 'test',
         email: 'test',
         password: pass,
-        shopList: [],
+        cart: [],
         myGames: [],
         img: 'test',
         address: 'test',
@@ -209,9 +209,42 @@ describe('Given GameController class', () => {
           info: { id: '1' },
           params: { id: '1' },
         } as unknown as RequestPlus;
+        (mockRepo.findOne as jest.Mock).mockResolvedValue({ owner: { _id: '1' } });
         (mockRepo.update as jest.Mock).mockResolvedValue({ id: '1' });
         await controller.updateGame(req, res, next);
         expect(res.json).toHaveBeenCalled();
+      });
+    });
+
+    describe('When the user is not the owner', () => {
+      test('Then it should call next with 403 and not update', async () => {
+        const req = {
+          body: { gameName: 'test' },
+          info: { id: '2' },
+          params: { id: '1' },
+        } as unknown as RequestPlus;
+        (mockRepo.findOne as jest.Mock).mockResolvedValue({ owner: { _id: '1' } });
+        (mockRepo.update as jest.Mock).mockClear();
+        await controller.updateGame(req, res, next);
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({ statusCode: 403 })
+        );
+        expect(mockRepo.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('When the game does not exist', () => {
+      test('Then it should call next with 404', async () => {
+        const req = {
+          body: {},
+          info: { id: '1' },
+          params: { id: '1' },
+        } as unknown as RequestPlus;
+        (mockRepo.findOne as jest.Mock).mockResolvedValue(null);
+        await controller.updateGame(req, res, next);
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({ statusCode: 404 })
+        );
       });
     });
 
@@ -248,9 +281,24 @@ describe('Given GameController class', () => {
         params: { id: '1' },
       } as unknown as RequestPlus;
 
+      (mockRepo.findOne as jest.Mock).mockResolvedValue({ owner: { _id: '1' } });
       (mockRepo.delete as jest.Mock).mockResolvedValue({ id: '1' });
       await controller.deleteGame(req, res, next);
       expect(res.status).toHaveBeenCalled();
+    });
+    test('Then if the user is not the owner it should 403 and not delete', async () => {
+      const req = {
+        body: {},
+        info: { id: '2' },
+        params: { id: '1' },
+      } as unknown as RequestPlus;
+      (mockRepo.findOne as jest.Mock).mockResolvedValue({ owner: { _id: '1' } });
+      (mockRepo.delete as jest.Mock).mockClear();
+      await controller.deleteGame(req, res, next);
+      expect(next).toHaveBeenCalledWith(
+        expect.objectContaining({ statusCode: 403 })
+      );
+      expect(mockRepo.delete).not.toHaveBeenCalled();
     });
   });
   describe('When deleteGame method is called', () => {
@@ -265,5 +313,106 @@ describe('Given GameController class', () => {
       await controller.deleteGame(req, res, next);
       expect(next).toHaveBeenCalled();
     });
+  });
+});
+
+describe('Given GameController category validation and POST response shape', () => {
+  const controller = new GameController(
+    mockGameCreator,
+    mockGameFinderAll,
+    mockGameFinder,
+    mockGameSearcher,
+    mockGameUpdate,
+    mockGameDeleter,
+    mockUserFinder,
+    mockUserUpdate
+  );
+  const owner = { id: 'u1', myGames: [] as unknown[] };
+  const body = (category: unknown) => ({
+    gameName: 'Hades',
+    category,
+    releaseDate: '2020-09-17',
+    img: 'x.jpg',
+    price: 20,
+    description: 'Roguelike',
+  });
+  const localRes = () =>
+    ({ json: jest.fn(), status: jest.fn() } as unknown as Response);
+
+  beforeEach(() => {
+    (mockUserRepo.find as jest.Mock).mockResolvedValue(owner);
+    (mockUserRepo.update as jest.Mock).mockResolvedValue(owner);
+  });
+
+  test.each(['Action', 'Adventure', 'Sports', 'Strategy', 'Indie', 'MOBA'])(
+    'createGame accepts the %s category',
+    async (category) => {
+      (mockRepo.create as jest.Mock).mockResolvedValue({
+        toObject: () => ({ _id: 'abc123', __v: 0, ...body(category) }),
+      });
+      const response = localRes();
+      const localNext = jest.fn();
+      await controller.createGame(
+        { body: body(category), info: { id: 'u1' } } as unknown as RequestPlus,
+        response,
+        localNext
+      );
+      expect(localNext).not.toHaveBeenCalled();
+      expect(response.status).toHaveBeenCalledWith(200);
+    }
+  );
+
+  test('createGame replies with `id` (not `_id`/`__v`), like GET', async () => {
+    (mockRepo.create as jest.Mock).mockResolvedValue({
+      toObject: () => ({ _id: { toString: () => 'abc123' }, __v: 0, ...body('Indie') }),
+    });
+    const response = localRes();
+    await controller.createGame(
+      { body: body('Indie'), info: { id: 'u1' } } as unknown as RequestPlus,
+      response,
+      jest.fn()
+    );
+    const [payload] = (response.json as jest.Mock).mock.calls[0];
+    expect(payload.results[0].id).toBe('abc123');
+    expect(payload.results[0]).not.toHaveProperty('_id');
+    expect(payload.results[0]).not.toHaveProperty('__v');
+    expect(payload.results[0].owner).toBe('u1');
+  });
+
+  test('createGame rejects an unknown category with a 400', async () => {
+    (mockRepo.create as jest.Mock).mockClear();
+    const localNext = jest.fn();
+    await controller.createGame(
+      { body: body('Racing'), info: { id: 'u1' } } as unknown as RequestPlus,
+      localRes(),
+      localNext
+    );
+    expect(localNext.mock.calls[0][0].statusCode).toBe(400);
+    expect(mockRepo.create).not.toHaveBeenCalled();
+  });
+
+  test('updateGame rejects an unknown category with a 400', async () => {
+    const localNext = jest.fn();
+    await controller.updateGame(
+      {
+        params: { id: 'g1' },
+        body: { category: 'Racing' },
+        info: { id: 'u1' },
+      } as unknown as RequestPlus,
+      localRes(),
+      localNext
+    );
+    expect(localNext.mock.calls[0][0].statusCode).toBe(400);
+  });
+
+  test('createGame answers 404 when the signed-in user no longer exists', async () => {
+    (mockUserRepo.find as jest.Mock).mockReturnValueOnce(null);
+    const next404 = jest.fn();
+    await controller.createGame(
+      { body: {}, info: { id: 'gone' } } as unknown as RequestPlus,
+      res,
+      next404
+    );
+    expect(next404.mock.calls[0][0].statusCode).toBe(404);
   });
 });
